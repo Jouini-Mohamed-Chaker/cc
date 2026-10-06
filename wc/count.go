@@ -2,19 +2,34 @@ package main
 
 import (
 	"bufio"
-	"os"
+	"bytes"
+	"io"
 )
 
-// Handles the "-w" option
-func CountNumberOfWords(filename string) (int, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return 0, err
-	}
-	defer file.Close()
+// Handles the "-clw" options when no option is provided
+func GetStats(reader io.Reader) (*Stats, error) {
+	var stats Stats
 
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		stats.Lines++
+
+		stats.Bytes += len(scanner.Bytes()) + 1 // Adding 1 to account for the consumed newline character
+
+		stats.Words += len(bytes.Fields(scanner.Bytes()))
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return &stats, nil
+}
+
+// Handles the "-w" option
+func CountNumberOfWords(reader io.Reader) (int, error) {
 	var numberOfWords int
-	scanner := bufio.NewScanner(file)
+
+	scanner := bufio.NewScanner(reader)
 	scanner.Split(bufio.ScanWords)
 
 	for scanner.Scan() {
@@ -29,15 +44,9 @@ func CountNumberOfWords(filename string) (int, error) {
 }
 
 // Handles the "-l" option
-func CountNumberOfLines(filename string) (int, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return 0, err
-	}
-	defer file.Close()
-
+func CountNumberOfLines(reader io.Reader) (int, error) {
 	var numberOfLines int
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
 		numberOfLines++
 	}
@@ -50,11 +59,18 @@ func CountNumberOfLines(filename string) (int, error) {
 }
 
 // Handles the "-c" option
-func CountNumberOfBytes(filename string) (int64, error) {
-	stat, err := os.Stat(filename)
-	if err != nil {
-		return 0, nil
+func CountNumberOfBytes(reader io.Reader) (int, error) {
+	var numberOfBytes int
+	scanner := bufio.NewScanner(reader)
+	scanner.Split(bufio.ScanBytes)
+
+	for scanner.Scan() {
+		numberOfBytes++
 	}
 
-	return stat.Size(), nil
+	if err := scanner.Err(); err != nil {
+		return 0, err
+	}
+
+	return numberOfBytes, nil
 }

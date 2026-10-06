@@ -2,12 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
-	"slices"
 	"strings"
 )
-
-var options = []string{"-c", "-l", "-w"}
 
 func main() {
 	if len(os.Args) > 3 {
@@ -18,63 +16,84 @@ func main() {
 	var option string
 	var filename string
 
-	// If first argument after command name is an option
-	if slices.Contains(options, os.Args[1]) {
-		// There has to be an argument after the option which is the filename
-		if len(os.Args) != 3 {
-			printUsage()
-			os.Exit(1)
+	if len(os.Args) == 1 {
+		printUsage()
+		os.Exit(1)
+
+	} else if len(os.Args) == 2 {
+		// Means we have one argument : can be either a filename
+		// Or an option to pass stdin
+		if strings.HasPrefix(os.Args[1], "-") {
+			option := os.Args[1]
+
+			printResultDependingOnOption(option, "", os.Stdin)
+
+		} else {
+			filename = os.Args[1]
+			file, err := os.Open(filename)
+			if err != nil {
+				printErrorAndExit(err)
+			}
+			defer file.Close()
+
+			// One function for the counting to reuse the buffer
+			stats, err := GetStats(file)
+			if err != nil {
+				printErrorAndExit(err)
+			}
+
+			fmt.Printf("%d %d %d %s\n", stats.Bytes, stats.Lines, stats.Words, filename)
 		}
+
+	} else if len(os.Args) == 3 {
+		// Means we have two arguments, probably an option and filename
 		option = os.Args[1]
 		filename = os.Args[2]
-	} else {
-		filename = os.Args[1]
+
+		file, err := os.Open(filename)
+		if err != nil {
+			printErrorAndExit(err)
+		}
+		defer file.Close()
+
+		// We look what argument was provided
+		printResultDependingOnOption(option, filename, file)
 	}
 
+}
+
+func printResultDependingOnOption(option string, filename string, reader io.Reader) {
 	switch option {
 	case "-c":
-		num, err := CountNumberOfBytes(filename)
+		num, err := CountNumberOfBytes(reader)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			printErrorAndExit(err)
 		}
 		fmt.Printf("%d %s\n", num, filename)
 	case "-l":
-		num, err := CountNumberOfLines(filename)
+		num, err := CountNumberOfLines(reader)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			printErrorAndExit(err)
 		}
 		fmt.Printf("%d %s\n", num, filename)
 	case "-w":
-		num, err := CountNumberOfWords(filename)
+		num, err := CountNumberOfWords(reader)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			printErrorAndExit(err)
 		}
 		fmt.Printf("%d %s\n", num, filename)
-	case "":
-		if filename == "" {
-			printUsage()
-		os.Exit(1)
-		}
-		numberOfBytes, err := CountNumberOfBytes(filename)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		}
-		numberOfLines, err := CountNumberOfLines(filename)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		}
-		numberOfWords, err := CountNumberOfWords(filename)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		}
 
-		fmt.Printf("%d %d %d %s\n", numberOfBytes, numberOfLines, numberOfWords, filename)
 	default:
 		printUsage()
 		os.Exit(1)
 	}
 }
 
+func printErrorAndExit(err error) {
+	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	os.Exit(1)
+}
+
 func printUsage() {
-	fmt.Printf("ccwc [%s] textfile\n", strings.Join(options, "|"))
+	fmt.Println("ccwc [-c|-l|-w] textfile")
 }
